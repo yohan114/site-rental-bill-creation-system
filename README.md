@@ -58,6 +58,16 @@ List rates come from `data/Fleet_Rental_Prices_2026.xlsx` and are embedded in
    node tests/check.mjs                         # data invariants + golden values
    ```
 
+4. Export the printable 3-tier rate card (optional, needs `pip install openpyxl`):
+
+   ```bash
+   python3 tools/export_rate_matrix.py          # → data/Fleet_Rental_Rate_Matrix_2026.xlsx
+   ```
+
+   `data/Fleet_Rental_Rate_Matrix_2026.xlsx` lists every unit with all three
+   tiers across Hourly / Daily / Per-KM — exactly the prices the invoice
+   system quotes (the workbook is generated from the embedded data).
+
 The script is idempotent and refuses to write if the Excel row order no longer
 matches the embedded array (positional merge is asserted per row on
 registration + E&C number).
@@ -80,9 +90,11 @@ banner + a rental line that names the basis (e.g.
 ## Repository layout
 
 ```
-index.html                          the entire app (UI + data, self-contained)
-data/Fleet_Rental_Prices_2026.xlsx  source price workbook
-tools/build_fleet_data.py           Excel → embedded data pipeline (stdlib only)
-tests/check.mjs                     data-invariant checks
-tests/smoke.mjs                     end-to-end browser test
+index.html                                the entire app (UI + data, self-contained)
+data/Fleet_Rental_Prices_2026.xlsx        source price workbook
+data/Fleet_Rental_Rate_Matrix_2026.xlsx   generated 3-tier rate card (system prices)
+tools/build_fleet_data.py                 Excel → embedded data pipeline (stdlib only)
+tools/export_rate_matrix.py               embedded data → rate-card Excel (openpyxl)
+tests/check.mjs                           data-invariant checks
+tests/smoke.mjs                           end-to-end browser test
 ```
