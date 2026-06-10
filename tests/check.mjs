@@ -24,7 +24,7 @@ const portable = JSON.parse(portM[1].replaceAll('<\\/', '</'));
 
 // ---- sizes ----
 check('518 fleet units', fleet.length === 518, `got ${fleet.length}`);
-check('36 portable items', portable.length === 36, `got ${portable.length}`);
+check('41 portable items (36 Excel + 5 catalogue extras)', portable.length === 41, `got ${portable.length}`);
 
 // ---- per-unit invariants ----
 let badTier = [], badRound = [], badKm = [], badLabel = 0;
@@ -77,6 +77,14 @@ check('golden BD-05 per-km tiers {285, w, 115}',
 // ---- portable invariants ----
 let badPort = portable.filter(p => !(p.dw >= p.dd && p.dd > 0 && p.label));
 check('portable dw ≥ dd > 0 with labels', badPort.length === 0, JSON.stringify(badPort[0] || ''));
+
+// catalogue extras: Light Plant + Concrete Mixer present with wet/dry day rates
+const lightPlants = portable.filter(p => p.cat === 'Light Plant');
+const mixers = portable.filter(p => p.cat === 'Concrete Mixer');
+check('2 Light Plant items', lightPlants.length === 2, `got ${lightPlants.length}`);
+check('3 Concrete Mixer items', mixers.length === 3, `got ${mixers.length}`);
+check('golden Concrete Mixer 10/7 drum {4500, 3000}',
+  mixers.some(p => p.dw === 4500 && p.dd === 3000));
 
 // ---- safety: no script-breaking sequences inside the generated data ----
 const dataBlock = html.match(/==FLEET-DATA:BEGIN==[\s\S]*?==FLEET-DATA:END==/)[0];

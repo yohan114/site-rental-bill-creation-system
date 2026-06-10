@@ -44,7 +44,10 @@ List rates come from `data/Fleet_Rental_Prices_2026.xlsx` and are embedded in
 ## Updating prices
 
 1. Edit `data/Fleet_Rental_Prices_2026.xlsx` (Fleet Pricing / Engineering Cost /
-   Portable Equipment Rates sheets — keep the row order).
+   Portable Equipment Rates sheets — keep the row order). Catalogue items that
+   are hired out but not in the workbook (Light Plant, Concrete Mixer, …) live
+   in the `EXTRA_PORTABLE` list at the top of `tools/build_fleet_data.py` —
+   add or re-price them there.
 2. Regenerate the embedded data:
 
    ```bash
