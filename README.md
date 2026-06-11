@@ -17,6 +17,18 @@ modern browser (double-click it) and start billing.
 | Daily timesheet log | Optional 31-day hour/km log that prints as a timesheet annex page |
 | Totals | SSCL 2.5% + VAT 18% (both editable) |
 | Output | Print / Save as PDF (A4, auto-scaled) |
+| **Drafts & autosave** | Documents save automatically while you type (plus 💾 Save Draft); the toolbar pill shows `DRAFT · saved 10:42`. Closing the browser loses nothing — the open document is restored on the next launch |
+| **Finalize (hard lock)** | ✅ Finalize permanently locks an invoice — view, print and ⧉ Duplicate-as-Draft only. The REF sequence number is committed **only at finalize** (printing a draft never burns a number) |
+| **📁 Document Library** | Every saved document, grouped by month with DRAFT/FINAL badges, customer, totals and monthly revenue subtotals. Search, reopen, print, duplicate; drafts can be deleted, finals are the permanent ledger |
+| **Backup** | ⬇ Export Backup downloads all documents + numbering counters as one JSON file; ⬆ Import merges it back (never wipes — newer copy wins, finals are never downgraded) |
+
+## How the document lifecycle works
+
+1. Work normally — everything autosaves as a **DRAFT** (browser localStorage, ~400+ documents capacity, usage meter in the library).
+2. Reopen any draft from **📁 Documents** to edit, add items, or print a preview.
+3. When the invoice is issued, press **✅ Finalize**: the document is validated, its REF number is committed, and it locks forever — that month's archive stays trustworthy.
+4. Need to revise a finalized invoice? **⧉ Duplicate as Draft** gives an editable copy with a fresh REF.
+5. Take an **Export Backup** regularly (and before changing computers): documents live in this browser's storage only. Two browser tabs editing at once is unsupported (last write wins).
 
 ## How the prices are derived
 

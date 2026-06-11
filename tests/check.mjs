@@ -92,11 +92,25 @@ check('no raw </script in data block', !dataBlock.includes('</script'));
 
 // ---- the functions the UI relies on exist exactly once ----
 for (const fn of ['getRateFor', 'applyAutoRate', 'setRateBasis', 'renderRateMatrix',
-                  'updateMatrixActive', 'selectRateCell', 'onRateEdited', 'basisWording']) {
+                  'updateMatrixActive', 'selectRateCell', 'onRateEdited', 'basisWording',
+                  // document lifecycle (save / finalize / archive)
+                  'snapshotDoc', 'restoreDoc', 'saveDraft', 'finalizeDoc', 'applyLockState',
+                  'duplicateDoc', 'openLibrary', 'renderLibrary', 'exportAllDocs',
+                  'importDocsFromFile', 'markDirty', 'genDocId', 'storageSet', 'rebuildIndex',
+                  'computeTotals', 'lockGuard']) {
   const n = (html.match(new RegExp(`function ${fn}\\(`, 'g')) || []).length;
   check(`function ${fn} defined once`, n === 1, `found ${n}`);
 }
 check('legacy setPortableBasis removed', !html.includes('setPortableBasis'));
+
+// ---- document-store invariants ----
+check('storage key literals present', html.includes("'enc_doc_'") && html.includes("'enc_current_doc'"));
+const savePdfBody = html.slice(html.indexOf('function savePDF'), html.indexOf('function ', html.indexOf('function savePDF') + 10));
+check('savePDF no longer commits refs (Finalize owns it)', !savePdfBody.includes('commitRef'));
+const dataFieldCount = (html.match(/data-field="/g) || []).length;
+check('≥ 19 data-field persisted editables', dataFieldCount >= 19, `got ${dataFieldCount}`);
+check('timesheet remark cells persisted', html.includes('data-ts-remark'));
+check('library modal present', html.includes('id="libraryModal"') && html.includes('id="libImportFile"'));
 
 console.log(failures === 0 ? '\nALL CHECKS PASSED' : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);

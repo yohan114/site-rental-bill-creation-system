@@ -5,6 +5,7 @@
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
+import { readFileSync } from 'node:fs';
 
 const require = createRequire(import.meta.url);
 let chromium;
@@ -90,6 +91,88 @@ check('minimum-guarantee row present', descs.includes('Minimum Guaranteed (120.0
 const grand = await page.textContent('#grandTotal');
 check('grand total computed (120 × 2800 → +SSCL +VAT = 406,392)', grand.includes('406,392.00'), grand);
 await page.screenshot({ path: '/tmp/smoke_page.png', fullPage: true });
+
+// ================= document lifecycle: save → reload → finalize → duplicate → library → backup =================
+page.on('dialog', d => d.accept());
+
+// save a draft and survive a reload
+await page.evaluate(() => { document.querySelector('#billedTo strong').textContent = 'ACME Constructions (Pvt) Ltd'; });
+await page.click('button:has-text("Save Draft")');
+check('pill shows saved draft', /DRAFT · saved \d{1,2}:\d{2}/.test(await page.textContent('#docStatusPill')),
+  await page.textContent('#docStatusPill'));
+const draftRef = await page.evaluate(() => document.getElementById('refInvoice').textContent.trim());
+await page.reload({ waitUntil: 'domcontentloaded' });
+check('customer survives reload', (await page.textContent('#billedTo')).includes('ACME Constructions'));
+check('items survive reload', await page.locator('#itemsBody tr').count() >= 2);
+check('ref survives reload', await page.evaluate(() => document.getElementById('refInvoice').textContent.trim()) === draftRef);
+
+// autosave: type → wait past the 2s debounce → clean (not dirty)
+await page.locator('#itemsBody input.cell[type="number"]').first().fill('110');
+await page.waitForTimeout(2600);
+check('autosave cleared dirty flag', await page.evaluate(() => !_dirty));
+
+// finalize → hard lock
+await page.click('button:has-text("Finalize")');
+check('pill shows FINAL', (await page.textContent('#docStatusPill')).includes('FINAL'));
+check('billedTo locked', await page.getAttribute('#billedTo', 'contenteditable') === 'false');
+check('item inputs disabled', await page.locator('#itemsBody input').first().isDisabled());
+check('addRow is a no-op when locked', await page.evaluate(() => { const n = items.length; addRow('x'); return items.length === n; }));
+const finalRef = await page.evaluate(() => document.getElementById('refInvoice').textContent.trim());
+check('seq counter committed', await page.evaluate(ref => {
+  const m = ref.match(/^INV\/(\d{4})\/(\d{2})\/(\d+)$/);
+  return parseInt(localStorage.getItem(`enc_seq_INV_${m[1]}_${m[2]}`) || '0') >= parseInt(m[3]);
+}, finalRef));
+await page.reload({ waitUntil: 'domcontentloaded' });
+check('still locked after reload', (await page.textContent('#docStatusPill')).includes('FINAL') &&
+  await page.getAttribute('#billedTo', 'contenteditable') === 'false');
+
+// duplicate as draft → editable again with a fresh ref
+await page.click('#duplicateBtn');
+check('duplicate is an editable draft', (await page.textContent('#docStatusPill')).includes('DRAFT') &&
+  await page.getAttribute('#billedTo', 'contenteditable') === 'true');
+const dupRef = await page.evaluate(() => document.getElementById('refInvoice').textContent.trim());
+check('duplicate got a fresh ref', dupRef !== finalRef, `${dupRef} vs ${finalRef}`);
+
+// library: rows, badges, month subtotal, search
+await page.click('button:has-text("Documents")');
+check('library lists 2 documents', await page.locator('.lib-row').count() === 2,
+  String(await page.locator('.lib-row').count()));
+check('badges FINAL + DRAFT', await page.locator('.lib-badge.final').count() === 1 &&
+  await page.locator('.lib-badge.draft').count() === 1);
+check('month header with subtotal', (await page.textContent('.lib-month-head')).includes('2 doc(s)'));
+await page.fill('#libSearch', 'zzz-no-match');
+check('search filters to empty state', await page.locator('.lib-empty').count() === 1);
+await page.fill('#libSearch', '');
+
+// export backup → wipe → import → everything returns
+const dlPromise = page.waitForEvent('download');
+await page.click('button:has-text("Export Backup")');
+const dl = await dlPromise;
+const backupPath = await dl.path();
+const backup = JSON.parse(readFileSync(backupPath, 'utf8'));
+check('backup payload valid', backup.app === 'enc-billing' && backup.docs.length === 2 &&
+  Object.keys(backup.seqCounters).some(k => k.startsWith('enc_seq_INV_')));
+await page.evaluate(() => localStorage.clear());
+await page.reload({ waitUntil: 'domcontentloaded' });
+await page.click('button:has-text("Documents")');
+check('library empty after wipe', await page.locator('.lib-empty').count() === 1);
+await page.setInputFiles('#libImportFile', backupPath);
+await page.waitForTimeout(400);
+check('import restored 2 documents', await page.locator('.lib-row').count() === 2,
+  String(await page.locator('.lib-row').count()));
+check('import restored seq counters', await page.evaluate(() =>
+  Object.keys(localStorage).some(k => k.startsWith('enc_seq_INV_') && parseInt(localStorage.getItem(k)) >= 1)));
+
+// reopen the finalized doc from the library → locked
+await page.locator('.lib-row:has(.lib-badge.final) button:has-text("Open")').click();
+check('final doc from library is locked', (await page.textContent('#docStatusPill')).includes('FINAL'));
+
+// + New from a FINAL doc must unlock and seed a fresh editable draft
+await page.click('button:has-text("+ New")');
+check('+ New from final unlocks as a seeded draft',
+  (await page.textContent('#docStatusPill')).includes('DRAFT') &&
+  await page.evaluate(() => items.length > 0 && computeTotals().grand > 0 &&
+    document.getElementById('billedTo').getAttribute('contenteditable') === 'true'));
 
 await browser.close();
 console.log(failures === 0 ? '\nSMOKE TEST PASSED' : `\n${failures} SMOKE CHECK(S) FAILED`);
