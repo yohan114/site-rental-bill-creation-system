@@ -97,7 +97,9 @@ for (const fn of ['getRateFor', 'applyAutoRate', 'setRateBasis', 'renderRateMatr
                   'snapshotDoc', 'restoreDoc', 'saveDraft', 'finalizeDoc', 'applyLockState',
                   'duplicateDoc', 'openLibrary', 'renderLibrary', 'exportAllDocs',
                   'importDocsFromFile', 'markDirty', 'genDocId', 'storageSet', 'rebuildIndex',
-                  'computeTotals', 'lockGuard']) {
+                  'computeTotals', 'lockGuard',
+                  // fuel issue (qty × month rate per vehicle)
+                  'rememberFuelRate', 'recallFuelRate', 'fuelRateKey']) {
   const n = (html.match(new RegExp(`function ${fn}\\(`, 'g')) || []).length;
   check(`function ${fn} defined once`, n === 1, `found ${n}`);
 }
@@ -111,6 +113,14 @@ const dataFieldCount = (html.match(/data-field="/g) || []).length;
 check('≥ 19 data-field persisted editables', dataFieldCount >= 19, `got ${dataFieldCount}`);
 check('timesheet remark cells persisted', html.includes('data-ts-remark'));
 check('library modal present', html.includes('id="libraryModal"') && html.includes('id="libImportFile"'));
+
+// ---- fuel issue invariants ----
+for (const id of ['calcFuelQty', 'calcFuelRate', 'calcFuelCost', 'fuelBasisHint', 'tsFuelRow']) {
+  check(`fuel element #${id} present`, html.includes(`id="${id}"`));
+}
+check('fuel invoice line wording present', html.includes('Fuel Issued — Diesel ${fmtN(fuelQty)} L @ Rs. ${fmtN(fuelRate)}/L'));
+check('fuel defaults in TIMESHEET_DEFAULTS', /fuelQty: 0,/.test(html) && /fuelRate: 0\s/.test(html));
+check('fuel rate exported in backup prefs', html.includes("k.startsWith('enc_fuel_rate')"));
 
 console.log(failures === 0 ? '\nALL CHECKS PASSED' : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);

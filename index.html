@@ -633,7 +633,24 @@
     margin-top: 8px;
     padding-right: 4px;
   }
-  
+
+  .fuel-issue-line {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 7px;
+    margin-top: 14px; padding: 10px 12px;
+    background: #FBF6EE; border: 1px solid #F0E2C8; border-radius: 6px;
+  }
+  .fuel-issue-line .fuel-lbl { font: 600 11px 'Bricolage Grotesque'; color: #14110F; margin-right: 2px; }
+  .fuel-issue-line .fuel-lbl em { font: italic 500 10px 'DM Sans'; color: #8A8278; }
+  .fuel-issue-line input {
+    width: 92px; padding: 6px 8px; border: 1px solid #E4DFD7; border-radius: 4px;
+    font: 500 12px 'DM Mono'; text-align: right; background: #fff; color: #14110F;
+  }
+  .fuel-issue-line input:focus { outline: none; border-color: #F58220; box-shadow: 0 0 0 2px rgba(245,130,32,.18); }
+  .fuel-issue-line .fuel-unit { font: 500 10px 'DM Mono'; color: #8A8278; }
+  .fuel-issue-line .x { color: #8A8278; font-size: 11px; }
+  .fuel-issue-line #calcFuelCost { font: 600 13px 'DM Mono'; color: #E26B0A; margin-left: 2px; }
+  .fuel-issue-line .fuel-hint { flex-basis: 100%; font: italic 500 10px 'DM Sans'; color: #B45309; }
+
   .calc-breakdown {
     background: #fff;
     border: 1px solid #E4DFD7;
@@ -1435,6 +1452,7 @@
             <tr><td>Total Hours Logged</td><td id="tsTotalLogged">0.00 hrs</td></tr>
             <tr><td>Shortfall to Minimum (120 hrs)</td><td id="tsShortfall">0.00 hrs</td></tr>
             <tr class="grand"><td>Billable Rental Hours</td><td id="tsBillableHrs">0.00 hrs</td></tr>
+            <tr id="tsFuelRow" style="display:none"><td id="tsFuelLabel">Fuel Issued</td><td id="tsFuelAmt">Rs. 0.00</td></tr>
           </table>
         </div>
       </div>
@@ -1599,7 +1617,20 @@
           Total Logged: <strong id="timesheetTotalHrs" style="color: #e26b0a;">0.00</strong> <span id="timesheetTotalUnit">hrs</span>
         </div>
       </div>
-      
+
+      <!-- Fuel Issue (single line: qty × month rate = cost) -->
+      <div class="fuel-issue-line" id="fuelIssueWrap">
+        <span class="fuel-lbl">⛽ Fuel Issued <em>(optional)</em></span>
+        <input type="number" id="calcFuelQty" min="0" step="0.01" value="0" oninput="calcRental()">
+        <span class="fuel-unit">L</span>
+        <span class="x">×</span>
+        <input type="number" id="calcFuelRate" min="0" step="0.01" value="0" oninput="calcRental()" title="This month's fuel rate — remembered automatically for the next document">
+        <span class="fuel-unit">Rs./L</span>
+        <span class="x">=</span>
+        <strong id="calcFuelCost">Rs. 0.00</strong>
+        <span class="fuel-hint" id="fuelBasisHint" style="display:none">Fully Wet rate already includes fuel — use this only for extra fuel billed separately</span>
+      </div>
+
       <!-- Live Calculation Breakdown Cards -->
       <div class="calc-breakdown">
         <h3>Calculation Breakdown</h3>
@@ -2010,7 +2041,9 @@ const PORTABLE_EQUIPMENT = [{"id":600,"cat":"Generator","cap":"3–5 kVA (petrol
     rateOverrides: { hourly: null, perkm: null, perday: null },  // manual rate edits per mode
     dailyHours: Array(31).fill(0),
     tsRemarks: Array(31).fill(''),   // per-day operator remarks on the timesheet annex
-    useDaily: false
+    useDaily: false,
+    fuelQty: 0,                      // liters of fuel issued to this vehicle
+    fuelRate: 0                      // Rs./L — 0 means "use the remembered month rate"
   };
   let timesheetData = structuredClone(TIMESHEET_DEFAULTS);
 
@@ -2250,6 +2283,8 @@ const PORTABLE_EQUIPMENT = [{"id":600,"cat":"Generator","cap":"3–5 kVA (petrol
     document.getElementById('calcActualHours').value =
       timesheetData.billingMode === 'perkm' ? timesheetData.actualKm
       : (timesheetData.billingMode === 'perday' ? timesheetData.actualDays : timesheetData.actualHours);
+    document.getElementById('calcFuelQty').value = timesheetData.fuelQty || 0;
+    document.getElementById('calcFuelRate').value = timesheetData.fuelRate || recallFuelRate();
 
     setBillingMode(timesheetData.billingMode);
     setRateBasis(timesheetData.rateBasis);
@@ -2312,6 +2347,19 @@ const PORTABLE_EQUIPMENT = [{"id":600,"cat":"Generator","cap":"3–5 kVA (petrol
     calcRental();
   }
 
+  // ---- month fuel rate memory: set the rate once, every document that month pre-fills it ----
+  function fuelRateKey() {
+    const now = new Date();
+    return `enc_fuel_rate_${now.getFullYear()}_${String(now.getMonth() + 1).padStart(2, '0')}`;
+  }
+  function rememberFuelRate(rate) {
+    storageSet(fuelRateKey(), String(rate));
+    storageSet('enc_fuel_rate_last', String(rate));
+  }
+  function recallFuelRate() {
+    return parseFloat(localStorage.getItem(fuelRateKey()) || localStorage.getItem('enc_fuel_rate_last')) || 0;
+  }
+
   function calcRental() {
     const mode = timesheetData.billingMode;
     const isKm = mode === 'perkm';
@@ -2333,6 +2381,13 @@ const PORTABLE_EQUIPMENT = [{"id":600,"cat":"Generator","cap":"3–5 kVA (petrol
     const billable = Math.max(actual, minU);
     const amount = billable * rate;
 
+    // fuel issue: qty × this month's rate, added to the vehicle's total
+    const fuelQty = parseFloat(document.getElementById('calcFuelQty').value) || 0;
+    const fuelRate = parseFloat(document.getElementById('calcFuelRate').value) || 0;
+    const fuelCost = fuelQty * fuelRate;
+    document.getElementById('calcFuelCost').textContent = `Rs. ${fuelCost.toLocaleString('en-LK', { minimumFractionDigits: 2 })}`;
+    document.getElementById('fuelBasisHint').style.display = timesheetData.rateBasis === 'fw' ? '' : 'none';
+
     // dynamic card labels
     const aLbl = isKm ? 'Actual KM' : (isDay ? 'Actual Days' : 'Actual Hours');
     const mLbl = isKm ? 'Minimum KM' : (isDay ? 'Minimum Days' : 'Minimum Hours');
@@ -2345,7 +2400,7 @@ const PORTABLE_EQUIPMENT = [{"id":600,"cat":"Generator","cap":"3–5 kVA (petrol
     document.getElementById('bdActualHrs').textContent = fmtU(actual);
     document.getElementById('bdMinHrs').textContent = fmtU(minU);
     document.getElementById('bdBillableHrs').textContent = fmtU(billable);
-    document.getElementById('bdTotalAmount').textContent = `Rs. ${amount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}`;
+    document.getElementById('bdTotalAmount').textContent = `Rs. ${(amount + fuelCost).toLocaleString('en-LK', { minimumFractionDigits: 2 })}`;
 
     const noun = isKm ? 'distance run' : (isDay ? 'days on hire' : 'hours worked');
     const minNoun = isKm ? 'guaranteed kilometres' : (isDay ? 'guaranteed days' : 'guaranteed hours');
@@ -2356,6 +2411,9 @@ const PORTABLE_EQUIPMENT = [{"id":600,"cat":"Generator","cap":"3–5 kVA (petrol
     } else {
       const diff = actual - minU;
       expl.innerHTML = `Actual ${noun} (<strong>${fmtU(actual)}</strong>) meets or exceeds the minimum ${minNoun} (<strong>${fmtU(minU)}</strong>).<br>Billed for full actual: <strong>${fmtU(actual)}</strong>. Excess of <strong>${fmtU(diff)}</strong> above minimum.`;
+    }
+    if (fuelCost > 0) {
+      expl.innerHTML += `<br>+ Fuel issued: <strong>${fuelQty.toLocaleString('en-LK', { minimumFractionDigits: 2 })} L</strong> @ Rs. ${fuelRate.toLocaleString('en-LK', { minimumFractionDigits: 2 })}/L = <strong>Rs. ${fuelCost.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</strong>.`;
     }
   }
 
@@ -2414,6 +2472,17 @@ const PORTABLE_EQUIPMENT = [{"id":600,"cat":"Generator","cap":"3–5 kVA (petrol
       addRow(`Excess run above minimum — ${fmtN(excess)} ${unitLong} (actual ${actualWord.toLowerCase()} ${fmtN(actual)} ${unitLong})`, unit, excess, rate);
     } else {
       addRow(`Equipment Rental — ${basis}, Actual ${actualWord} (${fmtN(actual)} ${unit})`, unit, actual, rate);
+    }
+
+    // fuel issued to this vehicle → one charge line under its section
+    const fuelQty = parseFloat(document.getElementById('calcFuelQty').value) || 0;
+    const fuelRate = parseFloat(document.getElementById('calcFuelRate').value) || 0;
+    timesheetData.fuelQty = fuelQty;
+    timesheetData.fuelRate = fuelRate;
+    if (fuelQty > 0) {
+      addRow(`Fuel Issued — Diesel ${fmtN(fuelQty)} L @ Rs. ${fmtN(fuelRate)}/L`, 'Ltr', fuelQty, fuelRate);
+      if (fuelRate > 0) rememberFuelRate(fuelRate);
+      else toast('Heads-up: fuel rate is 0 — edit the rate on the invoice row.');
     }
 
     if (useDaily) {
@@ -2498,6 +2567,18 @@ const PORTABLE_EQUIPMENT = [{"id":600,"cat":"Generator","cap":"3–5 kVA (petrol
     document.getElementById('tsTotalLogged').textContent = `${total.toFixed(2)} ${unit}`;
     document.getElementById('tsShortfall').textContent = `${shortfall.toFixed(2)} ${unit}`;
     document.getElementById('tsBillableHrs').textContent = `${billable.toFixed(2)} ${unit}`;
+
+    // fuel reconciliation line (only when fuel was issued to this vehicle)
+    const fuelRow = document.getElementById('tsFuelRow');
+    const fq = timesheetData.fuelQty || 0, fr = timesheetData.fuelRate || 0;
+    if (fq > 0) {
+      const fmtL = v => v.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      document.getElementById('tsFuelLabel').textContent = `Fuel Issued — Diesel ${fmtL(fq)} L @ Rs. ${fmtL(fr)}/L`;
+      document.getElementById('tsFuelAmt').textContent = `Rs. ${fmtL(fq * fr)}`;
+      fuelRow.style.display = '';
+    } else {
+      fuelRow.style.display = 'none';
+    }
 
     // Make visible
     document.getElementById('timesheetPage').style.display = 'flex';
@@ -2865,13 +2946,14 @@ const PORTABLE_EQUIPMENT = [{"id":600,"cat":"Generator","cap":"3–5 kVA (petrol
 
   // ---- backup: export / import ----
   function exportAllDocs() {
-    const seqCounters = {};
+    const seqCounters = {}, prefs = {};
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
       if (k && k.startsWith('enc_seq_')) seqCounters[k] = localStorage.getItem(k);
+      if (k && k.startsWith('enc_fuel_rate')) prefs[k] = localStorage.getItem(k);
     }
     const docs = loadIndex().map(e => loadDoc(e.id)).filter(Boolean);
-    const payload = { app: 'enc-billing', version: 1, exportedAt: new Date().toISOString(), seqCounters, docs };
+    const payload = { app: 'enc-billing', version: 1, exportedAt: new Date().toISOString(), seqCounters, prefs, docs };
     const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -2903,6 +2985,10 @@ const PORTABLE_EQUIPMENT = [{"id":600,"cat":"Generator","cap":"3–5 kVA (petrol
         if (!k.startsWith('enc_seq_')) return;
         const local = parseInt(localStorage.getItem(k) || '0');
         if (parseInt(v) > local) storageSet(k, String(parseInt(v)));
+      });
+      Object.entries(payload.prefs || {}).forEach(([k, v]) => {
+        // fuel rates aren't monotonic — restore only what this machine doesn't know yet
+        if (k.startsWith('enc_fuel_rate') && localStorage.getItem(k) == null) storageSet(k, v);
       });
       refreshRefDisplays();
       renderLibrary();

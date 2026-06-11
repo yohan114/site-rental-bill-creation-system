@@ -15,6 +15,7 @@ modern browser (double-click it) and start billing.
 | **Smart Rate Matrix** | Picking a machine shows a live 3 × 3 price grid (basis × billing method). **Tap any price to apply it** — basis, billing method and rate are set in one tap. Hand-edited rates get a `CUSTOM` badge; tap the cell again to restore the list rate |
 | Minimum-guarantee billing | Bills `max(actual, minimum)` and adds an explanatory shortfall/excess note line |
 | Daily timesheet log | Optional 31-day hour/km log that prints as a timesheet annex page |
+| **⛽ Fuel issue billing** | One line in the rental calculator: fuel quantity × that month's rate → auto-cost. Each vehicle gets its own "Fuel Issued" charge line on the invoice; the rate is remembered per month and pre-filled. A fuel reconciliation line prints on the timesheet annex |
 | Totals | SSCL 2.5% + VAT 18% (both editable) |
 | Output | Print / Save as PDF (A4, auto-scaled) |
 | **Drafts & autosave** | Documents save automatically while you type (plus 💾 Save Draft); the toolbar pill shows `DRAFT · saved 10:42`. Closing the browser loses nothing — the open document is restored on the next launch |

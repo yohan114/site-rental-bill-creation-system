@@ -92,6 +92,28 @@ const grand = await page.textContent('#grandTotal');
 check('grand total computed (120 × 2800 → +SSCL +VAT = 406,392)', grand.includes('406,392.00'), grand);
 await page.screenshot({ path: '/tmp/smoke_page.png', fullPage: true });
 
+// ================= fuel issue: qty × month rate → per-vehicle line =================
+const grandBeforeFuel = await page.evaluate(() => computeTotals().grand);
+await page.click('button:has-text("Machine Rental Calc")');
+await page.fill('#calcFuelQty', '450');
+await page.fill('#calcFuelRate', '305');
+check('fuel cost auto-calculated in modal', (await page.textContent('#calcFuelCost')).includes('137,250.00'),
+  await page.textContent('#calcFuelCost'));
+check('vehicle total includes fuel (336,000 + 137,250)', (await page.textContent('#bdTotalAmount')).includes('473,250.00'),
+  await page.textContent('#bdTotalAmount'));
+await page.click('#basisFwBtn');
+check('fully-wet shows fuel-included hint', await page.locator('#fuelBasisHint').isVisible());
+await page.click('#basisWBtn');
+check('hint hidden for wet basis', !(await page.locator('#fuelBasisHint').isVisible()));
+await page.click('button:has-text("Add to Document")');
+const fuelDescs = await page.$$eval('#itemsBody input.cell.left', els => els.map(e => e.value).join('\n'));
+check('fuel line on invoice (one line per vehicle)', fuelDescs.includes('Fuel Issued — Diesel 450.00 L @ Rs. 305.00/L'), fuelDescs);
+const grandAfterFuel = await page.evaluate(() => computeTotals().grand);
+check('grand grew by rental+fuel through taxes', Math.abs((grandAfterFuel - grandBeforeFuel) - (336000 + 137250) * 1.025 * 1.18) < 0.01,
+  String(grandAfterFuel - grandBeforeFuel));
+check('month fuel rate remembered', await page.evaluate(() =>
+  localStorage.getItem('enc_fuel_rate_last') === '305' && recallFuelRate() === 305));
+
 // ================= document lifecycle: save → reload → finalize → duplicate → library → backup =================
 page.on('dialog', d => d.accept());
 
@@ -173,6 +195,12 @@ check('+ New from final unlocks as a seeded draft',
   (await page.textContent('#docStatusPill')).includes('DRAFT') &&
   await page.evaluate(() => items.length > 0 && computeTotals().grand > 0 &&
     document.getElementById('billedTo').getAttribute('contenteditable') === 'true'));
+
+// month fuel rate survived the wipe→import round-trip and pre-fills new documents
+await page.click('button:has-text("Machine Rental Calc")');
+check('new doc pre-fills the month fuel rate', await page.inputValue('#calcFuelRate') === '305',
+  await page.inputValue('#calcFuelRate'));
+await page.click('#rentalCalcModal button:has-text("Cancel")');
 
 await browser.close();
 console.log(failures === 0 ? '\nSMOKE TEST PASSED' : `\n${failures} SMOKE CHECK(S) FAILED`);
