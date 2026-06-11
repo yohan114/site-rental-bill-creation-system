@@ -15,8 +15,21 @@ modern browser (double-click it) and start billing.
 | **Smart Rate Matrix** | Picking a machine shows a live 3 × 3 price grid (basis × billing method). **Tap any price to apply it** — basis, billing method and rate are set in one tap. Hand-edited rates get a `CUSTOM` badge; tap the cell again to restore the list rate |
 | Minimum-guarantee billing | Bills `max(actual, minimum)` and adds an explanatory shortfall/excess note line |
 | Daily timesheet log | Optional 31-day hour/km log that prints as a timesheet annex page |
+| **⛽ Fuel issue billing** | One line in the rental calculator: fuel quantity × that month's rate → auto-cost. Each vehicle gets its own "Fuel Issued" charge line on the invoice; the rate is remembered per month and pre-filled. A fuel reconciliation line prints on the timesheet annex |
 | Totals | SSCL 2.5% + VAT 18% (both editable) |
 | Output | Print / Save as PDF (A4, auto-scaled) |
+| **Drafts & autosave** | Documents save automatically while you type (plus 💾 Save Draft); the toolbar pill shows `DRAFT · saved 10:42`. Closing the browser loses nothing — the open document is restored on the next launch |
+| **Finalize (hard lock)** | ✅ Finalize permanently locks an invoice — view, print and ⧉ Duplicate-as-Draft only. The REF sequence number is committed **only at finalize** (printing a draft never burns a number) |
+| **📁 Document Library** | Every saved document, grouped by month with DRAFT/FINAL badges, customer, totals and monthly revenue subtotals. Search, reopen, print, duplicate; drafts can be deleted, finals are the permanent ledger |
+| **Backup** | ⬇ Export Backup downloads all documents + numbering counters as one JSON file; ⬆ Import merges it back (never wipes — newer copy wins, finals are never downgraded) |
+
+## How the document lifecycle works
+
+1. Work normally — everything autosaves as a **DRAFT** (browser localStorage, ~400+ documents capacity, usage meter in the library).
+2. Reopen any draft from **📁 Documents** to edit, add items, or print a preview.
+3. When the invoice is issued, press **✅ Finalize**: the document is validated, its REF number is committed, and it locks forever — that month's archive stays trustworthy.
+4. Need to revise a finalized invoice? **⧉ Duplicate as Draft** gives an editable copy with a fresh REF.
+5. Take an **Export Backup** regularly (and before changing computers): documents live in this browser's storage only. Two browser tabs editing at once is unsupported (last write wins).
 
 ## How the prices are derived
 
@@ -44,7 +57,10 @@ List rates come from `data/Fleet_Rental_Prices_2026.xlsx` and are embedded in
 ## Updating prices
 
 1. Edit `data/Fleet_Rental_Prices_2026.xlsx` (Fleet Pricing / Engineering Cost /
-   Portable Equipment Rates sheets — keep the row order).
+   Portable Equipment Rates sheets — keep the row order). Catalogue items that
+   are hired out but not in the workbook (Light Plant, Concrete Mixer, …) live
+   in the `EXTRA_PORTABLE` list at the top of `tools/build_fleet_data.py` —
+   add or re-price them there.
 2. Regenerate the embedded data:
 
    ```bash
@@ -57,6 +73,16 @@ List rates come from `data/Fleet_Rental_Prices_2026.xlsx` and are embedded in
    ```bash
    node tests/check.mjs                         # data invariants + golden values
    ```
+
+4. Export the printable 3-tier rate card (optional, needs `pip install openpyxl`):
+
+   ```bash
+   python3 tools/export_rate_matrix.py          # → data/Fleet_Rental_Rate_Matrix_2026.xlsx
+   ```
+
+   `data/Fleet_Rental_Rate_Matrix_2026.xlsx` lists every unit with all three
+   tiers across Hourly / Daily / Per-KM — exactly the prices the invoice
+   system quotes (the workbook is generated from the embedded data).
 
 The script is idempotent and refuses to write if the Excel row order no longer
 matches the embedded array (positional merge is asserted per row on
@@ -80,9 +106,11 @@ banner + a rental line that names the basis (e.g.
 ## Repository layout
 
 ```
-index.html                          the entire app (UI + data, self-contained)
-data/Fleet_Rental_Prices_2026.xlsx  source price workbook
-tools/build_fleet_data.py           Excel → embedded data pipeline (stdlib only)
-tests/check.mjs                     data-invariant checks
-tests/smoke.mjs                     end-to-end browser test
+index.html                                the entire app (UI + data, self-contained)
+data/Fleet_Rental_Prices_2026.xlsx        source price workbook
+data/Fleet_Rental_Rate_Matrix_2026.xlsx   generated 3-tier rate card (system prices)
+tools/build_fleet_data.py                 Excel → embedded data pipeline (stdlib only)
+tools/export_rate_matrix.py               embedded data → rate-card Excel (openpyxl)
+tests/check.mjs                           data-invariant checks
+tests/smoke.mjs                           end-to-end browser test
 ```
